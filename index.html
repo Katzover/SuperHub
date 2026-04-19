@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SUPERHUB</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&family=Inter:wght@900&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Assistant', sans-serif;
+  background-color: #050505;
+  color: white;
+  margin: 0;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.logo-font { font-family: 'Inter', sans-serif; }
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+
+@keyframes scaleIn {
+  from { transform: scale(0.97); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+.animate-scale-in { animation: scaleIn 0.18s ease-out forwards; }
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-slide-up { animation: slideUp 0.25s ease-out forwards; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+
+/* ── SuperHub Loader ─────────────────────────────────────────────
+   Three concentric arcs, each offset in phase and speed.
+   The result is a breathing, orbital feel — nothing mechanical.
+─────────────────────────────────────────────────────────────── */
+@keyframes orbitA {
+  0%   { stroke-dashoffset: 220; transform: rotate(0deg);   }
+  50%  { stroke-dashoffset: 40;  }
+  100% { stroke-dashoffset: 220; transform: rotate(360deg); }
+}
+@keyframes orbitB {
+  0%   { stroke-dashoffset: 160; transform: rotate(120deg); }
+  50%  { stroke-dashoffset: 20;  }
+  100% { stroke-dashoffset: 160; transform: rotate(480deg); }
+}
+@keyframes orbitC {
+  0%   { stroke-dashoffset: 100; transform: rotate(240deg); }
+  50%  { stroke-dashoffset: 10;  }
+  100% { stroke-dashoffset: 100; transform: rotate(600deg); }
+}
+@keyframes loaderPulse {
+  0%, 100% { opacity: 0.9; transform: scale(1);    }
+  50%       { opacity: 0.5; transform: scale(0.96); }
+}
+@keyframes dotBounce {
+  0%, 80%, 100% { transform: translateY(0);    opacity: 0.3; }
+  40%            { transform: translateY(-6px); opacity: 1;   }
+}
+
+.sh-loader { animation: loaderPulse 2s ease-in-out infinite; }
+
+.sh-arc { fill: none; stroke-linecap: round; transform-origin: center; }
+.sh-arc-a {
+  stroke: #f97316;
+  stroke-width: 3;
+  stroke-dasharray: 220;
+  animation: orbitA 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.sh-arc-b {
+  stroke: #fb923c;
+  stroke-width: 2;
+  stroke-dasharray: 160;
+  opacity: 0.6;
+  animation: orbitB 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.sh-arc-c {
+  stroke: #fdba74;
+  stroke-width: 1.5;
+  stroke-dasharray: 100;
+  opacity: 0.35;
+  animation: orbitC 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.sh-dot {
+  width: 5px; height: 5px;
+  background: #f97316;
+  border-radius: 50%;
+  display: inline-block;
+}
+.sh-dot:nth-child(1) { animation: dotBounce 1.2s ease-in-out 0.0s infinite; }
+.sh-dot:nth-child(2) { animation: dotBounce 1.2s ease-in-out 0.2s infinite; }
+.sh-dot:nth-child(3) { animation: dotBounce 1.2s ease-in-out 0.4s infinite; }
+
+/* legacy spin kept for nothing — removed */
+
+.sidebar-transition { transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Search input – remove default styling */
+.search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  width: 100%;
+  color: white;
+  font-family: 'Assistant', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+.search-input::placeholder { color: rgba(255,255,255,0.25); }
+
+/* Drawer swipe hint */
+.drawer-handle {
+  width: 36px; height: 4px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 2px;
+  margin: 0 auto 20px;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* ─── URLs ─────────────────────────────────────────────────────── */
+const SITES_URL   = 'https://raw.githubusercontent.com/Katzover/SuperHub/refs/heads/main/Sites.txt';
+const CREDITS_URL = 'https://raw.githubusercontent.com/Katzover/SuperHub/refs/heads/main/Credits.txt';
+/* Cache TTL: 10 minutes */
+const CACHE_TTL   = 10 * 60 * 1000;
+
+/* ─── i18n ──────────────────────────────────────────────────────── */
+const DICTIONARY = {
+  he: {
+    subtitle_labels: { no:'ללא תרגום', rare:'תרגום חלקי', mostly:'לרוב מתורגם', yes:'מתורגם לעברית' },
+    favorites: 'מועדפים',
+    recents:   'אחרונים',
+    credits:   'קרדיטים',
+    offline:   'אין חיבור לאינטרנט',
+    empty:     'אין תוכן כאן',
+    loading:   'טוען...',
+    ver:       'גרסה',
+    rights:    'זכויות',
+    author:    'יוצר',
+    categories:'קטגוריות',
+    search:    'חיפוש...',
+    clear_recents: 'נקה היסטוריה',
+    open_tab:  'פתח בלשונית',
+    blocked:   'האתר חסם הטמעה',
+    lang_toggle: 'EN',
+  },
+  en: {
+    subtitle_labels: { no:'No subtitles', rare:'Rare subtitles', mostly:'Mostly subtitled', yes:'Hebrew subtitles' },
+    favorites: 'Favorites',
+    recents:   'Recents',
+    credits:   'Credits',
+    offline:   'No Internet Connection',
+    empty:     'Nothing here yet',
+    loading:   'Loading...',
+    ver:       'Version',
+    rights:    'Rights',
+    author:    'Author',
+    categories:'Categories',
+    search:    'Search...',
+    clear_recents: 'Clear history',
+    open_tab:  'Open in new tab',
+    blocked:   'Site blocked embedding',
+    lang_toggle: 'עב',
+  }
+};
+
+/* ─── Icon set ──────────────────────────────────────────────────── */
+const ICON_PATHS = {
+  X:          <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+  Star:       <><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></>,
+  Clock:      <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+  Info:       <><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>,
+  WifiOff:    <><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>,
+  Languages:  <><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></>,
+  User:       <><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+  Shield:     <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
+  LayoutGrid: <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>,
+  Search:     <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+  ExternalLink:<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
+  Trash2:     <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></>,
+  Globe:      <><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>,
+  AlertTriangle:<><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+};
+
+const Icon = ({ name, size = 24, className = "" }) => (
+  <svg
+    width={size} height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    style={{ flexShrink: 0 }}
+  >
+    {ICON_PATHS[name] || null}
+  </svg>
+);
+
+/* ─── Loader component ───────────────────────────────────────────── */
+const Loader = ({ size = 72, label = '' }) => (
+  <div className="flex flex-col items-center gap-5 sh-loader">
+    <svg width={size} height={size} viewBox="0 0 80 80">
+      {/* Track rings */}
+      <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(249,115,22,0.06)" strokeWidth="3" />
+      <circle cx="40" cy="40" r="25" fill="none" stroke="rgba(249,115,22,0.05)" strokeWidth="2" />
+      <circle cx="40" cy="40" r="16" fill="none" stroke="rgba(249,115,22,0.04)" strokeWidth="1.5" />
+      {/* Animated arcs */}
+      <circle cx="40" cy="40" r="34" className="sh-arc sh-arc-a" />
+      <circle cx="40" cy="40" r="25" className="sh-arc sh-arc-b" />
+      <circle cx="40" cy="40" r="16" className="sh-arc sh-arc-c" />
+      {/* Centre dot */}
+      <circle cx="40" cy="40" r="3" fill="#f97316" opacity="0.8" />
+    </svg>
+    {label && (
+      <div className="flex items-center gap-1.5">
+        <span className="sh-dot" />
+        <span className="sh-dot" />
+        <span className="sh-dot" />
+      </div>
+    )}
+  </div>
+);
+
+/* ─── Fetch with localStorage cache ─────────────────────────────── */
+async function cachedFetch(url, cacheKey) {
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const { ts, data } = JSON.parse(cached);
+      if (Date.now() - ts < CACHE_TTL) return data;
+    } catch (_) {}
+  }
+  const res = await fetch(`${url}?t=${Math.floor(Date.now() / CACHE_TTL)}`);
+  if (!res.ok) throw new Error('fetch failed');
+  const data = await res.text();
+  try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data })); } catch (_) {}
+  return data;
+}
+
+/* ─── Parse Sites.txt ───────────────────────────────────────────── */
+function parseSites(text) {
+  const sites = [];
+  const cats  = [];
+  const catSet = new Set();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || !line.includes(':')) continue;
+    const firstColon = line.indexOf(':');
+    const name = line.substring(0, firstColon).trim();
+    const rest = line.substring(firstColon + 1);
+    const urlMatch = rest.match(/"(.*?)"/);
+    if (!urlMatch) continue;
+    let url = urlMatch[1];
+    if (!url.startsWith('http')) url = `https://${url}`;
+    const afterUrl = rest.substring(rest.indexOf(urlMatch[0]) + urlMatch[0].length);
+    const parts = afterUrl.split(':').map(p => p.trim()).filter(Boolean);
+    const category  = parts[0] || 'Other';
+    const subtitles = (parts[1] || 'no').toLowerCase();
+    const id = `${name}-${url}-${category}`;
+    sites.push({ id, name, url, category, subtitles });
+    if (!catSet.has(category)) { catSet.add(category); cats.push(category); }
+  }
+  return { sites, cats };
+}
+
+/* ─── Parse Credits.txt ─────────────────────────────────────────── */
+function parseCredits(text) {
+  const obj = {};
+  for (const line of text.split(/\r?\n/)) {
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    obj[line.substring(0, idx).trim().toLowerCase()] = line.substring(idx + 1).trim();
+  }
+  return obj;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   APP
+═══════════════════════════════════════════════════════════════════ */
+function App() {
+  /* Language — persisted, toggleable */
+  const [lang, setLang] = useState(() => {
+    const saved = localStorage.getItem('superhub_lang');
+    if (saved) return saved;
+    return (navigator.language || navigator.userLanguage || '').startsWith('he') ? 'he' : 'en';
+  });
+  const isHe = lang === 'he';
+  const t = DICTIONARY[lang];
+
+  const toggleLang = () => {
+    const next = lang === 'he' ? 'en' : 'he';
+    setLang(next);
+    localStorage.setItem('superhub_lang', next);
+  };
+
+  /* Data */
+  const [sites,       setSites]       = useState([]);
+  const [categories,  setCategories]  = useState([]);
+  const [creditsData, setCreditsData] = useState({ ver: '...', sentence: '...', credits: '...' });
+  const [activeCategory, setActiveCategory] = useState('');
+  const [activeUrl,   setActiveUrl]   = useState(null);
+  const [isOffline,   setIsOffline]   = useState(!navigator.onLine);
+  const [loading,     setLoading]     = useState(true);
+  const [isExpanded,  setIsExpanded]  = useState(false);
+  const [showMobileCats, setShowMobileCats] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  /* Persistent state */
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('superhub_favs') || '[]'); } catch { return []; }
+  });
+  const [recents, setRecents] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('superhub_recents') || '[]'); } catch { return []; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('superhub_favs',    JSON.stringify(favorites)); } catch (_) {}
+    try { localStorage.setItem('superhub_recents', JSON.stringify(recents));   } catch (_) {}
+  }, [favorites, recents]);
+
+  /* Network status */
+  useEffect(() => {
+    const goOnline  = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online',  goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+  }, []);
+
+  /* Fetch data */
+  useEffect(() => {
+    if (isOffline) return;
+    setLoading(true);
+    (async () => {
+      try {
+        const [sitesText, creditsText] = await Promise.all([
+          cachedFetch(SITES_URL,   'superhub_sites_cache'),
+          cachedFetch(CREDITS_URL, 'superhub_credits_cache'),
+        ]);
+        const { sites: s, cats } = parseSites(sitesText);
+        setSites(s);
+        setCategories(cats);
+        if (cats.length > 0) setActiveCategory(prev => prev || cats[0]);
+        setCreditsData(parseCredits(creditsText));
+      } catch (e) {
+        console.error('Fetch error:', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [isOffline]);
+
+  /* Handlers */
+  const handleSiteClick = useCallback((site) => {
+    setActiveUrl(site.url);
+    setRecents(prev => [site, ...prev.filter(s => s.id !== site.id)].slice(0, 12));
+  }, []);
+
+  const toggleFav = useCallback((site, e) => {
+    e.stopPropagation();
+    setFavorites(f => f.find(s => s.id === site.id) ? f.filter(s => s.id !== site.id) : [...f, site]);
+  }, []);
+
+  const clearRecents = useCallback(() => {
+    setRecents([]);
+    localStorage.removeItem('superhub_recents');
+  }, []);
+
+  const selectCategory = useCallback((cat) => {
+    setActiveCategory(cat);
+    setShowMobileCats(false);
+    setSearchQuery('');
+  }, []);
+
+  /* Derived site list */
+  const displayedSites = useMemo(() => {
+    let list;
+    if (activeCategory === t.favorites) list = favorites;
+    else if (activeCategory === t.recents) list = recents;
+    else if (activeCategory === t.credits) list = [];
+    else list = sites.filter(s => s.category === activeCategory);
+
+    if (!searchQuery.trim()) return list;
+    const q = searchQuery.toLowerCase();
+    return list.filter(s => s.name.toLowerCase().includes(q) || s.url.toLowerCase().includes(q));
+  }, [activeCategory, sites, favorites, recents, t, searchQuery]);
+
+  /* Special views */
+  const isSpecial = [t.favorites, t.recents, t.credits].includes(activeCategory);
+  const showRecents = activeCategory === t.recents;
+
+  if (isOffline) return <OfflineView t={t} />;
+
+  const dir = isHe ? 'rtl' : 'ltr';
+
+  return (
+    <div
+      className={`flex h-screen w-full bg-[#050505] text-white overflow-hidden`}
+      style={{ flexDirection: isHe ? 'row' : 'row-reverse', direction: dir }}
+      dir={dir}
+    >
+      {/* ── Desktop Sidebar ── */}
+      <aside
+        onMouseEnter={() => setIsExpanded(true)}
+        onMouseLeave={() => setIsExpanded(false)}
+        className={`sidebar-transition hidden md:flex flex-col border-white/5 bg-[#080808] z-30 shrink-0 ${isExpanded ? 'w-72' : 'w-20'} ${isHe ? 'border-l' : 'border-r'}`}
+      >
+        {/* Logo */}
+        <div className="h-20 flex items-center px-5 shrink-0 overflow-hidden">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl shrink-0 flex items-center justify-center font-black italic text-white shadow-lg shadow-blue-900/40 logo-font select-none">S</div>
+          <div className={`transition-all duration-300 flex items-center h-full overflow-hidden ${isHe ? 'mr-4' : 'ml-4'} ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <h1 className="font-black italic tracking-tighter bg-clip-text text-transparent bg-gradient-to-l from-white to-gray-500 whitespace-nowrap logo-font text-2xl">SUPERHUB</h1>
+          </div>
+        </div>
+
+        {/* Category list */}
+        <div className="flex-1 overflow-y-auto px-3 space-y-1 mt-2 custom-scrollbar overflow-x-hidden">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => selectCategory(cat)}
+              className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all ${activeCategory === cat ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-white/5 hover:text-white'}`}
+            >
+              <span className="w-6 h-6 flex items-center justify-center shrink-0 font-bold text-base">{cat.charAt(0).toUpperCase()}</span>
+              <span className={`text-sm font-bold whitespace-nowrap transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>{cat}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Bottom: language toggle + credits */}
+        <div className="p-3 space-y-1 shrink-0">
+          <button
+            onClick={toggleLang}
+            className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all text-gray-500 hover:bg-white/5 hover:text-white`}
+          >
+            <div className="w-6 h-6 flex items-center justify-center shrink-0"><Icon name="Globe" size={18} /></div>
+            <span className={`text-xs font-black tracking-widest uppercase whitespace-nowrap transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>{t.lang_toggle}</span>
+          </button>
+          <button
+            onClick={() => setActiveCategory(t.credits)}
+            className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all ${activeCategory === t.credits ? 'bg-purple-600 text-white' : 'text-gray-500 hover:bg-white/5 hover:text-white'}`}
+          >
+            <div className="w-6 h-6 flex items-center justify-center shrink-0"><Icon name="Info" size={18} /></div>
+            <span className={`text-sm font-bold whitespace-nowrap transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>{t.credits}</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main ── */}
+      <main className="flex-1 flex flex-col relative min-w-0 h-full">
+
+        {/* Mobile Header */}
+        <header className="h-16 md:h-20 flex items-center px-4 md:px-8 shrink-0 border-b border-white/5 md:border-none gap-3">
+          {/* Mobile logo */}
+          <div className="md:hidden flex items-center gap-2 shrink-0">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black italic text-sm logo-font select-none">S</div>
+            <h1 className="font-black italic tracking-tighter logo-font text-lg">SUPERHUB</h1>
+          </div>
+
+          {/* Desktop title */}
+          <h2 className={`hidden md:block text-xs font-black uppercase tracking-[0.3em] text-gray-500 shrink-0`}>
+            {activeCategory || t.loading}
+          </h2>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Search bar — shown when not on special views */}
+          {!isSpecial && (
+            <div className={`flex items-center gap-2 bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-2 transition-all w-40 md:w-64 focus-within:border-blue-500/50 focus-within:bg-white/[0.07]`}>
+              <Icon name="Search" size={14} className="text-gray-500 shrink-0" />
+              <input
+                className="search-input"
+                placeholder={t.search}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                dir={dir}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="text-gray-500 hover:text-white transition-colors shrink-0">
+                  <Icon name="X" size={14} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Mobile: language toggle */}
+          <button onClick={toggleLang} className="md:hidden p-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/5 transition-all shrink-0">
+            <Icon name="Globe" size={18} />
+          </button>
+
+          {/* Mobile: active category pill */}
+          <div className="md:hidden text-[9px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/10 px-2 py-1 rounded-md max-w-[90px] truncate shrink-0">
+            {activeCategory}
+          </div>
+        </header>
+
+        {/* Recents clear button */}
+        {showRecents && recents.length > 0 && (
+          <div className="px-4 md:px-8 pb-0 pt-2 flex justify-end">
+            <button
+              onClick={clearRecents}
+              className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 hover:text-red-400 transition-colors uppercase tracking-widest"
+            >
+              <Icon name="Trash2" size={12} />
+              {t.clear_recents}
+            </button>
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-32 md:pb-24 custom-scrollbar">
+          {loading ? (
+            <div className="h-full flex flex-col items-center justify-center">
+              <Loader size={80} label={t.loading} />
+            </div>
+          ) : activeCategory === t.credits ? (
+            <div className="pt-6"><CreditsView data={creditsData} t={t} isHe={isHe} /></div>
+          ) : displayedSites.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-700 gap-3">
+              <Icon name="Star" size={48} className="opacity-10" />
+              <p className="text-xs font-bold tracking-widest uppercase">{t.empty}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 py-6">
+              {displayedSites.map((site, i) => (
+                <SiteCard
+                  key={site.id}
+                  site={site}
+                  isFav={!!favorites.find(f => f.id === site.id)}
+                  onFav={e => toggleFav(site, e)}
+                  onClick={() => handleSiteClick(site)}
+                  index={i}
+                  t={t}
+                  isHe={isHe}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Navigation Bar */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 pb-6 safe-bottom pointer-events-none">
+          <div className="bg-[#111]/80 backdrop-blur-2xl border border-white/10 rounded-2xl flex items-center justify-around p-2 shadow-2xl pointer-events-auto">
+            <MobileNavBtn icon="LayoutGrid" active={!isSpecial}                        onClick={() => setShowMobileCats(true)} />
+            <MobileNavBtn icon="Clock"      active={activeCategory === t.recents}      onClick={() => selectCategory(t.recents)} />
+            <MobileNavBtn icon="Star"       active={activeCategory === t.favorites}    onClick={() => selectCategory(t.favorites)} color="text-yellow-500" />
+            <MobileNavBtn icon="Info"       active={activeCategory === t.credits}      onClick={() => selectCategory(t.credits)} />
+          </div>
+        </div>
+
+        {/* Desktop Quick Nav */}
+        <div className="hidden md:flex absolute bottom-8 left-1/2 -translate-x-1/2 z-40 w-max bg-[#111]/90 backdrop-blur-2xl border border-white/10 p-1.5 rounded-full items-center gap-1 shadow-2xl">
+          <QuickNavBtn label={t.recents}   icon="Clock" active={activeCategory === t.recents}   onClick={() => selectCategory(t.recents)} />
+          <QuickNavBtn label={t.favorites} icon="Star"  active={activeCategory === t.favorites} onClick={() => selectCategory(t.favorites)} color="text-yellow-500" />
+        </div>
+
+        {/* Mobile Category Drawer */}
+        {showMobileCats && (
+          <div
+            className="md:hidden fixed inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-end animate-fade-in"
+            onClick={() => setShowMobileCats(false)}
+          >
+            <div
+              className="w-full bg-[#0c0c0c] border-t border-white/10 rounded-t-[2.5rem] p-6 max-h-[80vh] overflow-y-auto custom-scrollbar animate-slide-up"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="drawer-handle" />
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-xl font-bold">{t.categories}</h3>
+                <button onClick={() => setShowMobileCats(false)} className="p-2 bg-white/5 rounded-full">
+                  <Icon name="X" size={18} />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pb-8">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => selectCategory(cat)}
+                    className={`p-4 rounded-2xl border transition-all text-sm font-bold text-center ${activeCategory === cat ? 'bg-blue-600 border-blue-400 text-white' : 'bg-white/5 border-white/5 text-gray-400 active:scale-95'}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Browser Overlay */}
+      {activeUrl && (
+        <BrowserOverlay url={activeUrl} onClose={() => setActiveUrl(null)} t={t} />
+      )}
+    </div>
+  );
+}
+
+/* ─── SiteCard ──────────────────────────────────────────────────── */
+const SiteCard = ({ site, onClick, isFav, onFav, index, t, isHe }) => {
+  const host = useMemo(() => { try { return new URL(site.url).hostname; } catch { return site.url; } }, [site.url]);
+  const subLabel = t.subtitle_labels[site.subtitles];
+  const subColor = {
+    yes:    'text-green-400 border-green-500/20 bg-green-500/10',
+    mostly: 'text-blue-400 border-blue-500/20 bg-blue-500/10',
+    rare:   'text-orange-400 border-orange-500/20 bg-orange-500/10',
+    no:     'text-red-400 border-red-500/20 bg-red-500/10',
+  }[site.subtitles] || 'text-gray-500 border-gray-500/20';
+
+  return (
+    <div
+      onClick={onClick}
+      className="group p-4 md:p-5 bg-white/[0.03] border border-white/[0.06] rounded-2xl hover:bg-white/[0.07] hover:border-white/10 transition-all cursor-pointer animate-scale-in active:scale-95"
+      style={{ animationDelay: `${Math.min(index * 0.02, 0.3)}s` }}
+    >
+      <div className={`flex items-start justify-between mb-3 md:mb-4`} style={{ flexDirection: isHe ? 'row' : 'row-reverse' }}>
+        <div className="w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-black border border-white/5 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+          <img
+            src={`https://www.google.com/s2/favicons?domain=${host}&sz=128`}
+            className="w-6 h-6 md:w-8 md:h-8"
+            onError={e => { e.target.onerror = null; e.target.src = 'https://www.google.com/favicon.ico'; }}
+            alt=""
+          />
+        </div>
+        <button
+          onClick={onFav}
+          className={`p-2.5 rounded-xl transition-colors ${isFav ? 'text-yellow-400 bg-yellow-500/10' : 'text-gray-600 hover:text-white'}`}
+          aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Icon name="Star" size={16} className={isFav ? 'fill-current' : ''} />
+        </button>
+      </div>
+
+      <div className={`font-bold text-base md:text-lg text-gray-100 truncate mb-0.5`} style={{ textAlign: isHe ? 'right' : 'left' }}>{site.name}</div>
+      <div className={`text-[10px] text-gray-500 font-mono truncate uppercase tracking-widest opacity-50 mb-3`} style={{ textAlign: isHe ? 'right' : 'left' }}>{host}</div>
+
+      {subLabel && (
+        <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-[9px] md:text-[10px] font-bold ${subColor}`}>
+          <Icon name="Languages" size={10} />{subLabel}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ─── BrowserOverlay with iframe error detection ────────────────── */
+function BrowserOverlay({ url, onClose, t }) {
+  const [blocked,  setBlocked]  = useState(false);
+  const [iframeReady, setIframeReady] = useState(false);
+  const iframeRef = useRef(null);
+  const host = useMemo(() => { try { return new URL(url).hostname; } catch { return url; } }, [url]);
+
+  /* Detect if the iframe loaded blank (X-Frame-Options block) */
+  const handleLoad = useCallback(() => {
+    setIframeReady(true);
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (doc && (!doc.body || doc.body.innerHTML.trim() === '')) {
+        setBlocked(true);
+      }
+    } catch (_) {
+      /* Cross-origin — page loaded fine */
+    }
+  }, []);
+
+  /* Fallback: after 3s if iframe is still empty height, mark blocked */
+  useEffect(() => {
+    setBlocked(false);
+    setIframeReady(false);
+    const timer = setTimeout(() => {
+      try {
+        const doc = iframeRef.current?.contentDocument;
+        if (doc && doc.body && doc.body.innerHTML.trim() === '') setBlocked(true);
+      } catch (_) {}
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [url]);
+
+  /* Keyboard: Esc to close */
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 bg-black z-[100] flex flex-col" dir="ltr">
+      {/* Toolbar */}
+      <div className="h-14 bg-[#0a0a0a] border-b border-white/5 flex items-center px-4 justify-between shrink-0 gap-3">
+        <button onClick={onClose} className="p-2.5 hover:bg-white/5 rounded-xl text-gray-400 hover:text-white transition-colors">
+          <Icon name="X" size={20} />
+        </button>
+        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 truncate flex-1 text-center">{host}</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-2.5 hover:bg-white/5 rounded-xl text-gray-400 hover:text-white transition-colors"
+          title={t.open_tab}
+        >
+          <Icon name="ExternalLink" size={18} />
+        </a>
+      </div>
+
+      {/* Blocked state */}
+      {blocked ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 bg-[#050505]">
+          <div className="w-16 h-16 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-400">
+            <Icon name="AlertTriangle" size={32} />
+          </div>
+          <div className="text-center">
+            <p className="font-bold text-gray-300 mb-1">{t.blocked}</p>
+            <p className="text-sm text-gray-600 mb-6">{host}</p>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold transition-colors"
+            >
+              <Icon name="ExternalLink" size={16} />
+              {t.open_tab}
+            </a>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 w-full bg-[#050505] relative">
+          {/* Loading overlay — fades out once iframe fires onLoad */}
+          {!iframeReady && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#050505]">
+              <Loader size={72} label />
+              <p className="mt-6 text-[10px] font-black uppercase tracking-[0.3em] text-orange-500/60">{host}</p>
+            </div>
+          )}
+          <iframe
+            ref={iframeRef}
+            src={url}
+            className="w-full h-full border-none bg-white"
+            style={{ opacity: iframeReady ? 1 : 0, transition: 'opacity 0.3s ease' }}
+            allow="autoplay; fullscreen; picture-in-picture"
+            onLoad={handleLoad}
+            title={host}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── CreditsView ───────────────────────────────────────────────── */
+const CreditsView = ({ data, t, isHe }) => (
+  <div className="max-w-2xl space-y-4 md:space-y-6 animate-scale-in">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+      <div className={`p-5 md:p-6 bg-white/[0.03] border border-white/10 rounded-2xl md:rounded-3xl flex items-center gap-4 md:gap-5`} style={{ textAlign: isHe ? 'right' : 'left' }}>
+        <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-500/10 text-purple-400 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0">
+          <Icon name="User" size={20} />
+        </div>
+        <div>
+          <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-gray-500">{t.author}</div>
+          <div className="text-base md:text-lg font-bold text-gray-200">{data.credits || '...'}</div>
+        </div>
+      </div>
+      <div className={`p-5 md:p-6 bg-white/[0.03] border border-white/10 rounded-2xl md:rounded-3xl flex items-center gap-4 md:gap-5`} style={{ textAlign: isHe ? 'right' : 'left' }}>
+        <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-500/10 text-blue-400 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0">
+          <Icon name="Shield" size={20} />
+        </div>
+        <div>
+          <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-gray-500">{t.ver}</div>
+          <div className="text-base md:text-lg font-bold font-mono text-gray-200">{data.ver || '...'}</div>
+        </div>
+      </div>
+    </div>
+    <div
+      className={`p-6 md:p-8 bg-gradient-to-br from-white/[0.02] to-transparent border border-white/5 rounded-2xl md:rounded-[2.5rem] relative overflow-hidden`}
+      style={{ textAlign: isHe ? 'right' : 'left' }}
+    >
+      <div className="relative z-10">
+        <div className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-600 mb-4">{t.rights}</div>
+        <p className="text-xl md:text-2xl font-bold text-gray-400 leading-tight italic">{data.sentence || '...'}</p>
+      </div>
+      <div className={`absolute -bottom-10 w-40 h-40 bg-white/5 blur-3xl rounded-full ${isHe ? '-right-10' : '-left-10'}`} />
+    </div>
+  </div>
+);
+
+/* ─── Nav helpers ───────────────────────────────────────────────── */
+const QuickNavBtn = ({ label, icon, active, onClick, color = "text-white" }) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-2 px-5 py-3 rounded-full text-xs font-bold transition-all ${active ? `bg-white/10 ${color}` : 'text-gray-500 hover:text-white'}`}
+  >
+    <Icon name={icon} size={15} className={active ? 'fill-current' : ''} />
+    <span>{label}</span>
+  </button>
+);
+
+const MobileNavBtn = ({ icon, active, onClick, color = "text-white" }) => (
+  <button
+    onClick={onClick}
+    className={`p-4 transition-all ${active ? color : 'text-gray-600'}`}
+  >
+    <Icon name={icon} size={24} className={active ? 'fill-current' : ''} />
+  </button>
+);
+
+/* ─── Offline view ──────────────────────────────────────────────── */
+const OfflineView = ({ t }) => (
+  <div className="h-screen flex flex-col items-center justify-center bg-black gap-4">
+    <Icon name="WifiOff" size={48} className="text-red-500 opacity-50" />
+    <h2 className="text-sm font-bold tracking-[0.4em] text-gray-500 uppercase">{t.offline}</h2>
+  </div>
+);
+
+/* ─── Mount ─────────────────────────────────────────────────────── */
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
